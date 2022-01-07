@@ -1,0 +1,224 @@
+---
+title: "Nashville Excercise 1"
+author: "Grant Rhines"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: spacelab
+    highlight: pygments
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Loading the required packages to run the script.
+library(rvest)
+library(magrittr)
+library(tidyr)
+library(xml2)
+library(openxlsx)
+library(knitr)
+library(estimatr)
+
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+## Post Match Analysis
+##### Nashville SC vs. Orlando City SC -- Nov. 23rd, 2021
+
+A quick look at [Statbomb's assessment of the match (via FBRef)](https://fbref.com/en/matches/edd92a6d/Nashville-SC-Orlando-City-November-23-2021-Major-League-Soccer) and [FootyStat's xG values](https://footystats.org/usa/orlando-city-sc-vs-nashville-sc-mls-h2h-stats#1448602), it is clear that Nashville scarcely deserved to win the match:
+
+```{r, echo=FALSE, out.width="50%", fig.cap="FBRef", fig.align='center'}
+knitr::include_graphics("NSH vs ORL FBRef.png")
+```
+
+
+```{r, echo=FALSE, out.width="30%", fig.cap="FootyStats", fig.align='center'}
+knitr::include_graphics("NSH vs ORL Footy.png")
+```
+
+Furthermore, [SofaScore's Attacking Momentum](https://www.sofascore.com/news/sofascore-attack-momentum/) graphic gives us a deeper look into each team's performance.
+
+***INSERT SOFA SCORE HTML CODE HERE USING SOME EDITOR (SUCH AS VISUAL CODE STUDIO)
+***THIS HAS TO BE DONE DUE TO AN ISSUE WITH HOW Rmd HTML FILES ARE WRITTEN
+
+Specifically, Orlando was able to dominate the majority of the match and were very unfortunate not to score in their pushes in the 60^th^ and 80^th^ minute. In Nashville's favor, the several sudden, large spikes in momentum tell us __the team's counter-attacking strategy was resulting in quality chances__.
+  
+
+The Attack Momentum graphic also gives us some quality insights into the impact each team's substitutions were able to make. While Orlando's late substitutions effectively reinvigorated their attack, __Nashville's mostly offensive changes did little to stop the flood of Orlando pressure came in the second half__. In hindsight, it may have been a better decision to bring on Taylor Washington rather than Tah Anunga.
+
+  
+Next, here are a few [statistics provided by SofaScore (via Opta)](https://www.sofascore.com/team/football/nashville-sc/337612) that demonstrate the solid defensive performance Nashville's back line displayed by significantly limiting the opportunities that were being created from the many Orlando attacks. Despite taking five shots within Nashville's penalty box, none of them were deemed as "big chances". 
+
+```{r, echo=FALSE, out.width="40%", fig.cap="SofaScore", fig.align='center'}
+knitr::include_graphics("NSH vs ORL Sofa.png")
+```
+
+All in all, __Nashville consistently absorbed their opponent's pressure to create lethal counter-attacking opportunities, but struggled to convert those chances into high-quality chances__.
+
+=========================================================================================================
+
+## Phil. Union Opposition Report
+
+### Team-level Insights
+
+Below is every match that Philadelphia Union played during the 2021 MLS season:
+
+```{r, echo=FALSE}
+url = "https://fbref.com/en/squads/46024eeb/Philadelphia-Union-Stats"
+
+webpage <- read_html(url, as.data.frame=T, stringsAsFactors = TRUE)
+  
+game_data <- webpage %>%  
+      html_nodes("table") %>% 
+      #Indicating we want the second table from the webpage.
+      .[[2]] %>% 
+      html_table(fill=T)
+
+#Getting a specific subset of the game-by-game data
+kable(data.frame(game_data)[,c(1,4,6,7:12,16)], caption = "2021 Philadelphia Union Schedule")
+```
+
+
+In 84% of their games over the last two MLS seasons, Philadelphia played in a __4-4-2◆__ formation. __This is the formation we will assume Union will be using in their next match against Nashville SC__. Though it would be useful also analyze the club's __4-3-2-1__ formation, which they used in Nashville's latest defeat, they have only ever deployed it a handful of times. 
+
+
+Nashville SC has only ever played Union three times. When playing with two strikers up front, Nashville got just one point from two games. When Nashville lined up with only one striker against Orlando, the team won the game. __So, it would appear the team should favor playing with a single striker rather than a partnership__, but obviously the sample sizes behind that analysis are ridiculously low to trust its conclusion.
+
+
+To get more robust results, I analyzed a custom data set that I put together from [FBRef](https://fbref.com/en/squads/46024eeb/Philadelphia-Union-Stats) (a sample of which is shown below) and performed an [Ordinary Least Squares Regression with Robust Standard Errors](https://www.rdocumentation.org/packages/estimatr/versions/0.30.4/topics/lm_robust) to evaluate the effect that a team's choice of formation against Union's 4-4-2◆ had on their chances of success.
+
+##### __Relevant Variables__
+* __xGD:__ tells us the difference between the xG for and xG against for a given match. A value above 0 suggests Union outperformed their opponent, while negative values tell us Philadelphia should have been beaten.
+
+* __OppoF2:__ a dummy variable that denotes whether Union's opposition played with a front two or not.
+
+* __OppoW:__  a dummy variable that tells us if Union's opposition chose to play with wingers or not.
+
+* __OppoTotalxGD/90:__ the opposition's total xG Differential Per 90 Minutes that each team had achieved at the end of the season. This metric was included as a way to quantify the overall quality of each opponent Union faced and was held constant in our regression analysis. 
+
+```{r, include=FALSE}
+#Loading in the match data for each game where Philadelphia has used a 4-4-2◆ formation since 2019.
+
+#To load in the data, simply make sure the "Phil Formation Data.xlsx" file is in the same file as this script.
+union_formation_data <- read.xlsx("Phil Formation Data.xlsx")
+
+#Cleaning the data to be more readable.
+union_formation_data$`OppoTotalxGD/90` <- round(union_formation_data$`OppoTotalxGD/90`, digits = 2)
+```
+
+
+```{r, echo=FALSE}
+kable(head(union_formation_data))
+```
+
+
+```{r}
+set.seed(0)
+
+#Fitting the model 
+obj <- lm_robust(xGD ~ 0 + OppoF2 + OppoW + `OppoTotalxGD/90`, data = union_formation_data)
+
+#Presenting the model's coefficients
+summary(obj)
+```
+
+#### Takeaways
+
+1. __Teams who chose to field a single striker rather than two can expect to generate 0.35 more xG over Union than they would have with two strikers leading their attack.__
+
+2. The inclusion of wingers also has a significant effect on the Philadelphia's xGDiff. 
+
+3. The overall quality of the team playing Union is an important variable to consider.
+
+With those observations in mind, this analysis tells us that __if Nashville SC is fielding a comparable squad to Philadelphia Union, the team would likely be better off playing a single striker in attack rather than playing with their 3-5-2 formation.__ At the very least, this analysis could be very useful to start a conversation with the coaching staff and performance analysts.
+
+### Individual-level Insights
+
+To find insights on the individual-level for Nashville's next match against Oralndo city, I used [American Soccer Analysis' (ASA) Goals Added](https://www.americansocceranalysis.com/what-are-goals-added) metric to identify the most integral players to Orlando's playmaking and goal scoring. 
+
+The following six players were The Lions' top producers in each category. The "Percentile" column tells us what percentage of players scored lower in ASA's rankings during the 2021 MLS season. For example, __Mauricio Pereyra's 0.11 Passing Goals Added/90 was better than 99% of other scores in the same category__.
+
+```{r, include=FALSE}
+#Loading in the match data for each game where Philadelphia has used a 4-2-3-1 formation since 2019 when their current head coach took over. This data was found here: https://app.americansocceranalysis.com/#!/mls/goals-added/players
+
+#To load in the data, simply make sure the "2021 MLS Player Data.xlsx" file is in the same file as this script.
+goals_added_data <- read.xlsx("2021 MLS Player Data.xlsx", sheet = 3)
+
+#Getting the Passing Goals Added Statistics for union's 2021 squad.
+union_passing_goals_added <- subset(goals_added_data, Team == "PHI" & Minutes > 1200)[,c(1,4,5,9,16)]
+
+#Changing the names of some variables for clarity
+names(union_passing_goals_added)[4] <- "Passing Goals Added/90"
+names(union_passing_goals_added)[5] <- "Percentile"
+
+#Cleaning the Percentile column
+union_passing_goals_added$Percentile <- round(union_passing_goals_added$Percentile)
+
+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+#Getting the Shooting Goals Added Statistics for union's 2021 squad.
+union_shooting_goals_added <- subset(goals_added_data, Team == "PHI" & Minutes > 1200)[,c(1,4,5,11,18)]
+
+#Changing the names of some variables for clarity
+names(union_shooting_goals_added)[4] <- "Shooting Goals Added/90"
+names(union_shooting_goals_added)[5] <- "Percentile"
+
+#Cleaning the Percentile column
+union_shooting_goals_added$Percentile <- round(union_shooting_goals_added$Percentile)
+
+#Reordering the Shooting Goals Added
+union_shooting_goals_added <- union_shooting_goals_added[order(union_shooting_goals_added$Percentile, decreasing = TRUE), ]
+```
+
+```{r, echo=FALSE}
+kable(union_passing_goals_added, caption = "2021 Philadelphia Union Passing Goals Added")
+
+kable(union_shooting_goals_added, caption = "2021 Philadelphia Union Shooting Goals Added")
+```
+
+
+#### Takeaways
+* By focusing the team's defensive efforts on stopping Jack Elliott, Kai Wagner, Oliver Mbaizo, and Jakob Glesnes from making key passes from their own defensive third, Nashville will be able stop Philadelphia from building out of the back; a key piece of their offensive strategy.
+
+* Though Sergio Santos and Kacper Przybylko are fantastic shooters for Union, they are amongst the worst passers in the league. If Nashville SC's defense can force them to be the playmakers for Monteiro and Bedoya, Philadelphia's attack would suffer enormously.
+
+=========================================================================================================
+
+## Phil. Union Set-Piece Analysis
+
+To get a general idea of Philadelphia's behavior during set-pieces, I used [ASA's xGoal](https://app.americansocceranalysis.com/#!/mls/xgoals/teams) data to rank each team's non-corner set-piece/corner efficiency and frequency in relation to other MLS teams. Those results shown below:
+
+```{r, include=FALSE}
+#Loading in the match corner and set-piece data.
+
+#To load in the data, simply make sure the "2021 MLS Corners.xlsx" and "2021 MLS Set-Pieces.xlsx" file is in the same file as this script.
+corner_data <- read.xlsx("2021 MLS Corners.xlsx")
+set_piece_data <- read.xlsx("2021 MLS Set-Pieces.xlsx")
+
+#Cleaning each data frame
+corner_data$`xGF/CK` <- round(corner_data$`xGF/CK`, digits = 2)
+set_piece_data$`xGF/FK` <- round(set_piece_data$`xGF/FK`, digits = 2)
+
+```
+
+
+```{r, echo=FALSE}
+kable(set_piece_data[c(16:20),], row.names = F, caption = "2021 MLS Set-piece Totals (Ranked By Frequency)")
+
+kable(corner_data[c(1:5),], row.names = F, caption = "2021 MLS Corner Totals (Ranked By Efficiency)")
+```
+
+In terms of non-corner set-pieces, Union performed poorly. Ranking 24^th^ of 27^th^ in xG per shot during the 2021 MLS season, they pose little threat from that area. 
+
+Additionally, they seldom choose to shoot the ball. In fact, __Union shoots from set-pieces 25% less than LAFC, who led the league in shots from free-kicks__. Instead, __Philadelphia generally chooses to use their free kicks as opportunities to set up subsequent chances that might prove to be more valuable__.
+
+Ironically, __Union were the most productive scorers from corner kicks during the 2021 MLS season__; producing nearly twice as much xG per shot as Austin FC. 
+
+#### Takeaways
+
+* Given that the kick is not being taken from a particularly threatening area, Nashville should focus on defending against dangerous passes rather than blocking shots while defending non-corner set-pieces. Setting up for counter attacks may be beneficial if the Boys In Gold are able to win the ball back from Union.
+
+* Philadelphia's corner kicks should be met with "no-nonsense" defending and be cleared rather than trying to played. 
+
